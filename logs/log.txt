@@ -1,0 +1,6 @@
+/Users/jjstephens/Coding/Github_school/risk_ai_bot/play_risk_ai.py:3: DeprecationWarning: the imp module is deprecated in favour of importlib; see the module's documentation for alternative uses
+  import imp
+Traceback (most recent call last):
+  File "/Users/jjstephens/Coding/Github_school/risk_ai_bot/play_risk_ai.py", line 289, in <module>
+    filecode = open(args.ais[i])
+FileNotFoundError: [Errno 2] No such file or directory: 'ai/attila_ai.py'
