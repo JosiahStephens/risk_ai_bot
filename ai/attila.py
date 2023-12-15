@@ -6,7 +6,7 @@ from gui.turbohelper import *
 import copy
 
 
-### ATTLLA AI ####
+### ATILLA AI ####
 # 
 #
 
@@ -191,7 +191,7 @@ def decide_attack(state: RiskState, actions):
 
     # priority 2: is there a continent border territory that we can take over?
     for action in actions:
-        if get_continent(continents, action.to_territory) != get_continent(continents, action.from_territory):
+        if get_continent(state, action.to_territory) != get_continent(state, action.from_territory):
             army_difference = state.armies[state.board.territory_to_id[action.to_territory]] - \
                               state.armies[state.board.territory_to_id[action.from_territory]]
             if army_difference > 2:
@@ -200,10 +200,14 @@ def decide_attack(state: RiskState, actions):
     return actions[0]
 
 
-def get_continent(continents, territory):
-    for key in continents:
-        if territory in continents[key]:
-            return key
+"""
+Given a RiskTerritory object, returns the RiskContinent that it belongs to
+"""
+def get_continent(state, territory_id):
+    for continent_name in state.board.continents:
+        continent = state.board.continents[continent_name]
+        if territory_id in continent.territories:
+            return continent
 
 
 def get_army_difference_in_continent(state, continent):
@@ -271,10 +275,12 @@ def get_number_of_troops_required_to_take_over_continent(state, continent: RiskC
         min_troops_required = 10000
         explored_territories = set()
 
-        for territory_id in territories_explored:
+        for territory in territories_explored:
             distance = 0
-            troops_required = find_nearest_owned_territory(state, territory_id, distance, explored_territories) + troops
+            troops_required = find_nearest_owned_territory(state, territory.id, distance, explored_territories) + troops
             min_troops_required = min(min_troops_required, troops_required)
+
+        print("It will take", min_troops_required, "troops to take over", continent.name)
 
         if min_troops_required > 1000:
             return -1  # No territories found, return a default value or handle accordingly
@@ -288,6 +294,9 @@ def get_ownership_percentage_of_continent(state, continent):
             territory_difference += 1
     return territory_difference / len(continent)
 
+"""
+Returns a list of RiskTerritory objects that border a continent
+"""
 def get_border_territories_of_continent(state, continent: RiskContinent):
     border_territories: [RiskTerritory] = []
     for territory_id in continent.territories:
