@@ -210,6 +210,10 @@ def get_continent(state, territory_id):
             return continent
 
 
+"""
+Takes in a RiskState and a RiskContinent and returns the difference in armies between the current player and the other
+players in that continent.
+"""
 def get_army_difference_in_continent(state, continent):
     army_difference = 0
     for territory in continent:
@@ -220,6 +224,10 @@ def get_army_difference_in_continent(state, continent):
     return army_difference
 
 
+"""
+Takes in a RiskState and a RiskContinent and returns the difference in territories between the current 
+player and the other players in that continent.
+"""
 def get_territory_difference_in_continent(state, continent):
     territory_difference = 0
     for territory in continent:
@@ -229,9 +237,10 @@ def get_territory_difference_in_continent(state, continent):
             territory_difference -= 1
     return territory_difference
 
-# Assuming you have a function get_border_territories_of_continent defined
-# and a function calculate_distance_between_territories defined
 
+"""
+Returns the number of troops required to get to a continent
+"""
 def find_nearest_owned_territory(state: RiskState, territory_id, distance, explored):
     territory = state.board.territories[territory_id]
 
