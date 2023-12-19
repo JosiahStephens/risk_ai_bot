@@ -10,9 +10,24 @@ import copy
 ### ATILLA AI ####
 #
 #
+class Singleton:
+    _instance = None
+    HAS_GOTTEN_RISK_CARD = False  # Member variable to track if the instance has gotten a risk card
 
-def test():
-    return True
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def has_gotten_risk_card(self):
+        return self.HAS_GOTTEN_RISK_CARD
+
+    def set_has_gotten_risk_card(self, value):
+        self.HAS_GOTTEN_RISK_CARD = value
+
+
+singleton_instance = Singleton()
+
 def getAction(state, time_left=None):
     """Main AI function.  It should return a valid AI action for this state."""
 
@@ -36,6 +51,7 @@ def getAction(state, time_left=None):
 
     if state.turn_type == 'PreAssign':
         selected_action = decide_presign(state, actions, continents_name_to_territory_name)
+        singleton_instance.HAS_GOTTEN_RISK_CARD = False # reset when starting turn
 
     if state.turn_type == 'Attack':
         selected_action = decide_attack(state, actions)
@@ -45,6 +61,7 @@ def getAction(state, time_left=None):
 
     if state.turn_type == 'Occupy':
         selected_action = decide_occupy(state, actions)
+        singleton_instance.HAS_GOTTEN_RISK_CARD = True # set to true when occupying
 
     if state.turn_type == 'Fortify':
         selected_action = decide_fortify(state, actions)
@@ -210,10 +227,7 @@ def decide_attack(state: RiskState, actions):
                     if action.to_territory is not None and action.from_territory is not None:
                         if state.board.territory_to_id[action.to_territory] in continents[key].territories:
                             return action
-            print("THIS SHOULD NEVER HAPPEN. LARGE ERROR.")
-            print("Best path:")
-            for territory in best_path:
-                print(territory.name)
+            print("It is not possible to attack in the continent.")
 
     print("No continents to take over. Attempting to take over a border territory.")
     # priority 2: is there a continent border territory that we can take over?
@@ -231,6 +245,24 @@ def decide_attack(state: RiskState, actions):
                     print(f"Too risky to attack {action.to_territory} from {action.from_territory}.")
             else:
                 print(f"{to_territory.name} is not a border territory.")
+
+    print("Have we gotten a risk card? ", singleton_instance.has_gotten_risk_card())
+
+    # priority 3: get a risk card if we don't already have one
+    if not singleton_instance.has_gotten_risk_card():
+        easiest_attack = None
+        easiest_attack_army_difference = -1000
+        for action in actions:
+            if action.to_territory is not None and action.from_territory is not None:
+                # find easiest territory to attack
+                to_territory = get_territory_from_name(state, action.to_territory)
+                from_territory = get_territory_from_name(state, action.from_territory)
+                army_difference = state.armies[from_territory.id] - state.armies[to_territory.id]
+                if army_difference > easiest_attack_army_difference:
+                    easiest_attack = action
+                    easiest_attack_army_difference = army_difference
+        print(f"Getting a risk card by attacking {easiest_attack.to_territory} from {easiest_attack.from_territory}.")
+        return easiest_attack
 
     if len(actions) > 1:
         return actions[-1] # pass turn action
@@ -255,8 +287,10 @@ def decide_occupy(state: RiskState, actions):
             min_troops = action.troops
             min_action = action
 
+    print(f"Maximum action: {max_action.from_territory} -> {max_action.to_territory} with {max_action.troops} troops")
 
     for neighbor_id in from_territory.neighbors:
+        print(f"Neighbor: {state.board.territories[neighbor_id].name}")
         if state.owners[neighbor_id] != state.current_player:
             # check if the neighbor is part of another continent
             if get_continent(state, state.board.territories[neighbor_id]) != get_continent(state, from_territory):
@@ -268,7 +302,11 @@ def decide_occupy(state: RiskState, actions):
 def decide_fortify(state: RiskState, actions):
     # find the territory with the most troops
     max_troops = 0
-    max_action = actions[0]
+
+    if len(actions) == 1:
+        return actions[0]
+
+    max_action = actions[-1]
     for action in actions:
         if action.troops is not None:
             if action.troops > max_troops:
@@ -300,16 +338,37 @@ def decide_fortify(state: RiskState, actions):
                     # is a frontier
                     is_frontier = True
             if is_frontier:
-                return action
+                # only move all troops
+                if action.troops == max_troops:
+                    print(f"Successfully fortified from {max_action.from_territory} with {max_action.troops} troops.")
+                    return action
+
+        # we need to find the path to the nearest border territory
+        path = get_path_to_border(state, from_territory)
+        best_to_territory = None
+        if len(path) >= 1:
+            best_to_territory = path[0]
+
+        print("Path to border:")
+        for territory in path:
+            print(f"{territory.name} -> ", end="")
+
+        if best_to_territory is not None:
+            for action in currently_considered_actions:
+                if action.to_territory == best_to_territory.name:
+                    print(f"Following path from {max_action.from_territory} to {max_action.to_territory} with {max_action.troops} troops.")
+                    return action
 
         return max_action # just to do something
 
     else:
         print("No fortification possible.")
-        if len(actions) > 1:
-            return actions[-1]
-        else:
-            return actions[0]
+        for action in actions:
+            # don't fortify
+            if action.from_territory is None:
+                return action
+        print("THIS SHOULD NEVER HAPPEN. LARGE ERROR.")
+        return actions[0]
 
 """
 Given a RiskTerritory id, returns the RiskContinent that it belongs to
@@ -347,6 +406,37 @@ def get_territory_difference_in_continent(state, continent):
         if state.owners[territory_id] != state.current_player:
             territory_difference -= 1
     return territory_difference
+
+"""
+Returns the path to get to the border from inside your territory
+"""
+def get_path_to_border(state: RiskState, territory, max_depth=7):
+    return path_to_border_helper(state, territory, set(), max_depth)
+
+"""
+Helper function for get_path_to_border
+"""
+def path_to_border_helper(state: RiskState, territory: RiskTerritory, visited, max_depth):
+    visited.add(territory.id)
+
+    if state.owners[territory.id] != state.current_player or max_depth == 0:
+        return [territory]  # Return the current territory if it's a border territory or reached max depth
+
+    shortest_path = None
+    shortest_length = float('inf')
+
+    for neighbor_id in territory.neighbors:
+        if neighbor_id not in visited:
+            neighbor = state.board.territories[neighbor_id]
+            path = path_to_border_helper(state, neighbor, visited.copy(), max_depth - 1)
+            if path and len(path) < shortest_length:
+                shortest_path = path
+                shortest_length = len(path)
+
+    if shortest_path is not None:
+        shortest_path.insert(0, territory)
+
+    return shortest_path
 
 
 """
