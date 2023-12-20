@@ -42,8 +42,6 @@ def getAction(state, time_left=None):
     # Get the possible actions in this state
     actions = getAllowedActions(state)
 
-    print("----------------------")
-    print(f"State.turn_type: {state.turn_type}")
 
     # Select a Random Action (to use for who knows why)
     selected_action = random.choice(actions)
@@ -77,8 +75,6 @@ def getAction(state, time_left=None):
         selected_action = decide_fortify(state, actions)
 
 
-    print(f"Selected action: {selected_action.from_territory} -> {selected_action.to_territory} with {selected_action.troops} troops")
-    print("----------------------")
 
     # Return the chosen action
     return selected_action
@@ -113,7 +109,6 @@ def decide_presign(state: RiskState, actions, continents):
     best_value = 0
     for action in actions:
         value = 0
-        # print(f"Territory: {action.to_territory}")
         # priority 2: if territory is in South America, add 9
         if action.to_territory in continents['South America']:
             value += 4
@@ -146,7 +141,6 @@ def decide_presign(state: RiskState, actions, continents):
             best_value = value
             best_action = action
 
-    print(f"Best action: {best_action.to_territory} with value {best_value}")
     return best_action
 
 
@@ -168,7 +162,6 @@ def decide_place(state: RiskState, actions):
                         # There is a conflict on the border of this continent
                         # We may need to place troops here
                         enemies_nearby += state.armies[neighbor_id]
-                print(f"Enemies near {territory.name}: {enemies_nearby}")
                 if enemies_nearby > state.armies[territory.id] - 4:
                     # This territory is in danger
                     army_difference = state.armies[territory.id] - enemies_nearby
@@ -180,8 +173,6 @@ def decide_place(state: RiskState, actions):
                 for action in actions:
                     if action.to_territory == territory_most_in_danger.name:
                         return action
-            else:
-                print(f"{key} is safe. No need to place troops there.")
 
     # priority 2: which continent is the easiest take over?
     continents_available_to_take_over = {}
@@ -208,21 +199,17 @@ def decide_place(state: RiskState, actions):
     easiest_continent_difficulty = -1000
 
     for key in continents_available_to_take_over:
-        print(f"Continent: {key} is difficulty {continents_available_to_take_over[key]}")
         if continents_available_to_take_over[key] > easiest_continent_difficulty:
             easiest_continent = key
             easiest_continent_difficulty = continents_available_to_take_over[key]
-    print(f"The easiest continent to take over would be: {easiest_continent}")
 
 
     starting_point, path = get_path_to_take_over_continent(state, continents[easiest_continent])
 
     if len(path) > 0:
         best_territory_to_place = starting_point
-        print(f"Best territory to place in {easiest_continent}: {best_territory_to_place.name}")
         for action in actions:
             if action.to_territory == best_territory_to_place.name:
-                print(f"I'm placing on {action.to_territory}.")
                 return action
 
     # priority 2: which frontier is most at risk?
@@ -244,10 +231,8 @@ def decide_place(state: RiskState, actions):
     if most_at_risk_frontier_territory is not None:
         for action in actions:
             if action.to_territory == most_at_risk_frontier_territory.name:
-                print(f"I'm placing on {action.to_territory} because it is high risk.")
                 return action
 
-    print("I am struggling to place troops, so I just placed them wherever.")
     return actions[0]
 
 
@@ -261,12 +246,9 @@ def decide_attack(state: RiskState, actions):
     for key in continents:
         troops_required = get_number_of_troops_required_to_take_over_continent(state, continents[key])
         army_difference = get_army_difference_in_continent(state, continents[key])
-        print(f"Continent: {key} will require {troops_required} troops to take over.")
-        print(f"Our army difference: {army_difference}")
 
         starting_territory, best_path = get_path_to_take_over_continent(state, continents[key])
         if len(best_path) >= 1 and army_difference > troops_required:
-            print(f"Trying to attack in {key}")
             # if there are troops at best path, use them
             if state.armies[starting_territory.id] > 1:
                 for action in actions:
@@ -280,27 +262,17 @@ def decide_attack(state: RiskState, actions):
                     if action.to_territory is not None and action.from_territory is not None:
                         if state.board.territory_to_id[action.to_territory] in continents[key].territories:
                             return action
-            print("It is not possible to attack in the continent.")
 
     singleton_instance.CONTINENT_TAKE_OVER_MODE = False
-    print("No continents to take over. Attempting to take over a border territory.")
     # priority 2: is there a continent border territory that we can take over?
     for action in actions:
         if action.to_territory is not None and action.from_territory is not None:
             to_territory = get_territory_from_name(state, action.to_territory)
             from_territory = get_territory_from_name(state, action.from_territory)
-            print(f"Checking if {to_territory.name} is a border territory. I could attack from {from_territory.name}.")
             if get_continent(state, to_territory.id).name != get_continent(state, from_territory.id).name:
                 army_difference = state.armies[from_territory.id] - state.armies[to_territory.id]
                 if army_difference > 2:
-                    print(f"Looks like a good option. Attacking {action.to_territory} from {action.from_territory}.")
                     return action
-                else:
-                    print(f"Too risky to attack {action.to_territory} from {action.from_territory}.")
-            else:
-                print(f"{to_territory.name} is not a border territory.")
-
-    print("Have we gotten a risk card? ", singleton_instance.has_gotten_risk_card())
 
     # priority 3: get a risk card if we don't already have one
     if not singleton_instance.has_gotten_risk_card():
@@ -308,14 +280,13 @@ def decide_attack(state: RiskState, actions):
         easiest_attack_army_difference = -1000
         for action in actions:
             if action.to_territory is not None and action.from_territory is not None:
-                # find easiest territory to attack
+                # find the easiest territory to attack
                 to_territory = get_territory_from_name(state, action.to_territory)
                 from_territory = get_territory_from_name(state, action.from_territory)
                 army_difference = state.armies[from_territory.id] - state.armies[to_territory.id]
                 if army_difference > easiest_attack_army_difference:
                     easiest_attack = action
                     easiest_attack_army_difference = army_difference
-        print(f"Getting a risk card by attacking {easiest_attack.to_territory} from {easiest_attack.from_territory}.")
         return easiest_attack
 
     if len(actions) > 1:
@@ -341,17 +312,12 @@ def decide_occupy(state: RiskState, actions):
             min_troops = action.troops
             min_action = action
 
-    print(f"Maximum action: {max_action.from_territory} -> {max_action.to_territory} with {max_action.troops} troops")
 
     if singleton_instance.CONTINENT_TAKE_OVER_MODE:
-        print("Continent take over mode.")
         return max_action
     else:
-        print("Not in continent take over mode.")
         for neighbor_id in from_territory.neighbors:
-            print(f"Neighbor: {state.board.territories[neighbor_id].name}")
             if state.owners[neighbor_id] != state.current_player:
-                print("-> is the enemy!")
                 return min_action
         return max_action
 
@@ -360,7 +326,6 @@ def decide_fortify(state: RiskState, actions):
     max_troops = 0
 
     if len(actions) == 1:
-        print("No fortification possible.")
         return actions[0]
 
     max_action = actions[-1]
@@ -379,7 +344,6 @@ def decide_fortify(state: RiskState, actions):
                     max_action = action
 
     if max_action.from_territory is not None:
-        print(f"Looking to fortify from {max_action.from_territory} with {max_action.troops} troops.")
         from_territory = get_territory_from_name(state, max_action.from_territory)
         currently_considered_actions = []
         for action in actions:
@@ -397,7 +361,6 @@ def decide_fortify(state: RiskState, actions):
             if is_frontier:
                 # only move all troops
                 if action.troops == max_troops:
-                    print(f"Successfully fortified from {max_action.from_territory} with {max_action.troops} troops.")
                     return action
 
         # we need to find the path to the nearest border territory
@@ -406,25 +369,18 @@ def decide_fortify(state: RiskState, actions):
         if len(path) >= 1:
             best_to_territory = path[0]
 
-        print("Path to border:")
-        for territory in path:
-            print(f"{territory.name} -> ", end="")
-
         if best_to_territory is not None:
             for action in currently_considered_actions:
                 if action.to_territory == best_to_territory.name:
-                    print(f"Following path from {max_action.from_territory} to {max_action.to_territory} with {max_action.troops} troops.")
                     return action
 
         return max_action # just to do something
 
     else:
-        print("No fortification desirable.")
         for action in actions:
             # don't fortify
             if action.from_territory is None:
                 return action
-        print("THIS SHOULD NEVER HAPPEN. LARGE ERROR.")
         return actions[0]
 
 """
@@ -526,7 +482,6 @@ def get_number_of_troops_required_to_take_over_continent(state, continent: RiskC
     troops = 0
     we_have_army_in_continent = False
 
-    # print(continent)
 
     for territory_id in continent.territories:
         if state.owners[territory_id] == state.current_player:
@@ -537,7 +492,6 @@ def get_number_of_troops_required_to_take_over_continent(state, continent: RiskC
     if we_have_army_in_continent:
         return troops
     else:
-        print(f"We don't have any army in {continent.name}")
         territories_explored = get_border_territories_of_continent(state, continent)
         min_troops_required = 10000
         explored_territories = set()
@@ -547,7 +501,6 @@ def get_number_of_troops_required_to_take_over_continent(state, continent: RiskC
             troops_required = find_nearest_owned_territory(state, territory.id, distance, explored_territories) + troops
             min_troops_required = min(min_troops_required, troops_required)
 
-        print("It will take", min_troops_required, "troops to take over", continent.name)
 
         if min_troops_required > 1000:
             return -1  # No territories found, return a default value or handle accordingly
@@ -621,7 +574,6 @@ def get_path_to_take_over_continent(state: RiskState, continent: RiskContinent):
                         if state.owners[neighbor_id] != state.current_player:
                             starting_points.append(territory.name)
 
-    print(f"Starting points: {starting_points}")
 
     max_length = 0
     max_starting_point_territory = None
@@ -634,16 +586,6 @@ def get_path_to_take_over_continent(state: RiskState, continent: RiskContinent):
             max_length = len(best_path_from_starting_point)
             max_starting_point_territory = state.board.territories[state.board.territory_to_id[starting_point_string]]
             best_path = best_path_from_starting_point
-
-    if len(best_path) > 0:
-        print(f"Best path: {max_starting_point_territory.name} -> ", end="")
-        for index, territory in enumerate(best_path):
-            if index == len(best_path) - 1:
-                print(f"{territory.name}")
-            else:
-                print(f"{territory.name} -> ", end="")
-    else:
-        print("No path found.")
 
     return max_starting_point_territory, best_path
 
