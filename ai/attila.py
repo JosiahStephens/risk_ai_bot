@@ -13,7 +13,8 @@ import copy
 class Singleton:
     _instance = None
     HAS_GOTTEN_RISK_CARD = False  # Member variable to track if the instance has gotten a risk card
-
+    CONTINENT_TAKE_OVER_MODE = False  # Member variable to track if the instance is in continent take over mode
+    CONTINENT_TAKE_OVER_PATH = []  # Member variable to track the path to take over a continent
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -52,6 +53,8 @@ def getAction(state, time_left=None):
     if state.turn_type == 'PreAssign':
         selected_action = decide_presign(state, actions, continents_name_to_territory_name)
         singleton_instance.HAS_GOTTEN_RISK_CARD = False # reset when starting turn
+        singleton_instance.CONTINENT_TAKE_OVER_MODE = False # reset when starting turn
+        singleton_instance.CONTINENT_TAKE_OVER_PATH = [] # reset when starting turn
 
     if state.turn_type == 'Attack':
         selected_action = decide_attack(state, actions)
@@ -135,6 +138,8 @@ def decide_place(state: RiskState, actions):
         if get_ownership_percentage_of_continent(state, continents[key]) == 1:
             # get the border territories
             border_territories = get_frontier_territories(state, continents[key])
+            territory_most_in_danger = None
+            territory_most_in_danger_army_difference = 1000
             for territory in border_territories:
                 enemies_nearby = 0
                 for neighbor_id in territory.neighbors:
@@ -144,10 +149,18 @@ def decide_place(state: RiskState, actions):
                         enemies_nearby += state.armies[neighbor_id]
                 print(f"Enemies near {territory.name}: {enemies_nearby}")
                 if enemies_nearby > state.armies[territory.id] - 4:
-                    # We need to place troops here
-                    for action in actions:
-                        if action.to_territory == territory.name:
-                            return action
+                    # This territory is in danger
+                    army_difference = state.armies[territory.id] - enemies_nearby
+                    if army_difference < territory_most_in_danger_army_difference:
+                        territory_most_in_danger = territory
+
+            # We need to place troops here
+            if territory_most_in_danger is not None:
+                for action in actions:
+                    if action.to_territory == territory_most_in_danger.name:
+                        return action
+            else:
+                print(f"{key} is safe. No need to place troops there.")
 
     # priority 2: which continent is the easiest take over?
     continents_available_to_take_over = {}
@@ -191,8 +204,27 @@ def decide_place(state: RiskState, actions):
                 print(f"I'm placing on {action.to_territory}.")
                 return action
 
-    # priority 2: is there a continent border territory that we can take over?
-    # print(get_border_territories(state, continents))
+    # priority 2: which frontier is most at risk?
+    most_at_risk_frontier_territory = None
+    most_at_risk_frontier_territory_army_difference = 1000
+
+    for action in actions:
+        if action.to_territory is not None:
+            to_territory = get_territory_from_name(state, action.to_territory)
+            for neighbor_id in to_territory.neighbors:
+                if state.owners[neighbor_id] != state.current_player:
+                    # There is a conflict on the border of this continent
+                    # We may need to place troops here
+                    army_difference = state.armies[to_territory.id] - state.armies[neighbor_id]
+                    if army_difference < most_at_risk_frontier_territory_army_difference:
+                        most_at_risk_frontier_territory = to_territory
+                        most_at_risk_frontier_territory_army_difference = army_difference
+
+    if most_at_risk_frontier_territory is not None:
+        for action in actions:
+            if action.to_territory == most_at_risk_frontier_territory.name:
+                print(f"I'm placing on {action.to_territory} because it is high risk.")
+                return action
 
     print("I am struggling to place troops, so I just placed them wherever.")
     return actions[0]
@@ -203,7 +235,7 @@ def decide_attack(state: RiskState, actions):
         return actions[0]
 
     continents = state.board.continents
-
+    singleton_instance.CONTINENT_TAKE_OVER_MODE = True
     # priority 1: is there a continent that we can take over?
     for key in continents:
         troops_required = get_number_of_troops_required_to_take_over_continent(state, continents[key])
@@ -229,6 +261,7 @@ def decide_attack(state: RiskState, actions):
                             return action
             print("It is not possible to attack in the continent.")
 
+    singleton_instance.CONTINENT_TAKE_OVER_MODE = False
     print("No continents to take over. Attempting to take over a border territory.")
     # priority 2: is there a continent border territory that we can take over?
     for action in actions:
@@ -289,21 +322,24 @@ def decide_occupy(state: RiskState, actions):
 
     print(f"Maximum action: {max_action.from_territory} -> {max_action.to_territory} with {max_action.troops} troops")
 
-    for neighbor_id in from_territory.neighbors:
-        print(f"Neighbor: {state.board.territories[neighbor_id].name}")
-        if state.owners[neighbor_id] != state.current_player:
-            # check if the neighbor is part of another continent
-            if get_continent(state, state.board.territories[neighbor_id]) != get_continent(state, from_territory):
-            # we are leaving troops behind
+    if singleton_instance.CONTINENT_TAKE_OVER_MODE:
+        print("Continent take over mode.")
+        return max_action
+    else:
+        print("Not in continent take over mode.")
+        for neighbor_id in from_territory.neighbors:
+            print(f"Neighbor: {state.board.territories[neighbor_id].name}")
+            if state.owners[neighbor_id] != state.current_player:
+                print("-> is the enemy!")
                 return min_action
-
-    return max_action
+        return max_action
 
 def decide_fortify(state: RiskState, actions):
     # find the territory with the most troops
     max_troops = 0
 
     if len(actions) == 1:
+        print("No fortification possible.")
         return actions[0]
 
     max_action = actions[-1]
@@ -362,7 +398,7 @@ def decide_fortify(state: RiskState, actions):
         return max_action # just to do something
 
     else:
-        print("No fortification possible.")
+        print("No fortification desirable.")
         for action in actions:
             # don't fortify
             if action.from_territory is None:
